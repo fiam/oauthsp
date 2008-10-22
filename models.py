@@ -32,6 +32,7 @@ from django.contrib.auth.models import User
 
 from decorators import stored_property
 from oauthsp import signatures, exceptions, castings
+from storage.models import StoredFile
 
 TOKEN_FORM = None
 TOKEN_ATTRS_MODEL = None
@@ -92,7 +93,8 @@ class Consumer(models.Model):
     developer_email = models.EmailField(_('Developer email'))
     uri = models.CharField(_('Web'), max_length=255)
     description = models.TextField(_('Description'))
-    image_path = models.CharField(_('Image'), max_length=16)
+    image = models.ForeignKey(StoredFile, related_name='consumer_image_set')
+    small_image = models.ForeignKey(StoredFile, related_name='consumer_small_image_set')
     score = models.FloatField(default=0)
     registration_date = models.DateTimeField(default=datetime.now)
     updated_date = models.DateTimeField()
@@ -102,14 +104,11 @@ class Consumer(models.Model):
     def get_absolute_url(self):
         return ('consumer', [self.id])
 
-    def get_image_url(self, size):
-        return '%s%s/%s' % (settings.CONSUMER_IMGS_URL, size, self.image_path)
-
     def get_small_image_url(self):
-        return self.get_image_url(64)
+        return self.small_image.get_absolute_url()
 
     def get_big_image_url(self):
-        return self.get_image_url(128)
+        return self.image.get_absolute_url()
 
     def save(self, *args, **kwargs):
         self.updated_date = datetime.now()

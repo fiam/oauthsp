@@ -22,22 +22,24 @@
 
 from django.core.urlresolvers import reverse
 from django.http import HttpResponseRedirect, HttpResponse, HttpResponseForbidden
-from django.views.generic.simple import direct_to_template
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 from django.utils.safestring import mark_safe
 from django.conf import settings
 
-from oauthsp.paginator import QuerySetPaginator
+# This allows the notes application to override
+# direct_to_template and intercept it for the
+# mobile site version
+from django.views.generic import simple
+direct_to_template = simple.direct_to_template
 
-from storer import FileStorer
-
-from notes.utils import direct_to_template
+from storage.models import StoredFile
 
 from oauthsp.models import Consumer, Token, get_token_form
 from oauthsp.request import OAuthRequest
 from oauthsp.exceptions import OAuthError, OAuthMissingParamError
+from oauthsp.paginator import QuerySetPaginator
 from forms import *
 
 CONSUMERS_PER_PAGE = 10
@@ -86,8 +88,8 @@ def new_consumer(request):
 
     consumer = form.save(commit=False)
     consumer.user = request.user
-    consumer.image_path = FileStorer('%s/%s/' % (settings.CONSUMER_IMGS_PATH, 128)).store(form.big_image.read(), suffix='png')
-    FileStorer('%s/%s/' % (settings.CONSUMER_IMGS_PATH, 64)).store(form.small_image.read(), path=consumer.image_path)
+    consumer.image = StoredFile.store_file('image.png', form.big_image)
+    consumer.small_image = StoredFile.store_file('image.png', form.small_image)
     consumer.save()
     return HttpResponseRedirect(consumer.get_absolute_url())
 
@@ -120,13 +122,17 @@ def edit_consumer(request, consumer_id):
     consumer.description = form.cleaned_data['description']
     consumer.private = form.cleaned_data['private']
     consumer.editable_attributes = form.cleaned_data['editable_attributes']
-    print consumer.editable_attributes
+    for_deletion = []
     if hasattr(form, 'big_image'):
-        for isize in (64, 128):
-            FileStorer.remove('%s/%s/%s' % (settings.CONSUMER_IMGS_PATH, isize, consumer.image_path))
-        consumer.image_path = FileStorer('%s/%s/' % (settings.CONSUMER_IMGS_PATH, 128)).store(form.big_image.read(), suffix='png')
-        FileStorer('%s/%s/' % (settings.CONSUMER_IMGS_PATH, 64)).store(form.small_image.read(), path=consumer.image_path)
+        if consumer.image:
+            for_deletion = [consumer.image, consumer.small_image]
+
+        consumer.image = StoredFile.store_file('image.png', form.big_image)
+        consumer.small_image = StoredFile.store_file('image.png', form.small_image)
     consumer.save()
+    # Delete after changing the foreign keys
+    for obj in for_deletion:
+        obj.delete()
     return HttpResponseRedirect(consumer.get_absolute_url())
 
 def consumer(request, consumer_id):
