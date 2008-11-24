@@ -50,28 +50,6 @@ CONSUMER_ORDER_MAPPINGS = {
 
 DEFAULT_CONSUMER_ORDER_FIELD = 'newest'
 
-def seconds_to_string(value):
-    months, remaining = divmod(value, 18144000)
-    days, remaining = divmod(remaining, 86400)
-    hours, remaining = divmod(remaining, 3600)
-    minutes, remaining = divmod(remaining, 60)
-
-    return ', '.join(['%s %s' % (v, s) for v, s in [(months, _('months')),
-            (days, _('days')), (hours, _('hours')), (minutes, _('minutes')),
-            (remaining, _('seconds'))] if v > 0])
-
-def mangle_authorization_form(form, token):
-    form.fields['renew'].label = mark_safe(_('Let %s renew its' \
-            ' access permissions (you can cancel them at any time' \
-            ' in your settings)') % token.consumer.name)
-    # an hour, a day, a week
-    if token.duration not in (3600, 86400, 604800):
-        form.fields['duration'].choices = [(token.duration, seconds_to_string(token.duration))] + form.fields['duration'].choices
-
-    if not token.consumer.editable_attributes:
-        for field in (field for field in form.fields if not field.startswith('oauth_')):
-            form.fields[field].widget.attrs.update({'disabled': 'disabled'})
-
 @login_required
 def new_consumer(request):
     if request.method == 'GET':
@@ -194,7 +172,7 @@ def authorize(request):
             if token.consumer.consumer_type in ('D', 'M'):
                 initial.update((('renew', True), ))
             form = get_token_form()(initial=initial)
-            mangle_authorization_form(form, token)
+            form.configure_for_token(token)
 
             return direct_to_template(request,
                 'oauthsp/authorize.html', locals())
@@ -209,7 +187,7 @@ def authorize(request):
         return HttpResponseRedirect(reverse('authorize-token'))
 
     form = get_token_form()(request.POST)
-    mangle_authorization_form(form, token)
+    form.configure_for_token(token)
     if not form.is_valid():
         return direct_to_template(request,
             'oauthsp/authorize.html', locals())

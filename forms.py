@@ -24,9 +24,20 @@ from cStringIO import StringIO
 from PIL import Image
 
 from django import forms
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ugettext, ugettext_lazy as _
+from django.utils.safestring import mark_safe
 from models import Consumer
 
+def seconds_to_string(value):
+    months, remaining = divmod(value, 18144000)
+    days, remaining = divmod(remaining, 86400)
+    hours, remaining = divmod(remaining, 3600)
+    minutes, remaining = divmod(remaining, 60)
+
+    _ = ugettext
+    return ', '.join(['%s %s' % (v, s) for v, s in [(months, _('months')),
+            (days, _('days')), (hours, _('hours')), (minutes, _('minutes')),
+            (remaining, _('seconds'))] if v > 0])
 
 class ConsumerForm(forms.ModelForm):
     image = forms.FileField()
@@ -107,3 +118,17 @@ class TokenAuthorizationForm(forms.Form):
         self.fields['duration'] = d
         self.fields['renew'] = r
 
+    def configure_for_token(self, token):
+        self.fields['renew'].label = mark_safe(_('Let %s renew its' \
+            ' access permissions (you can cancel them at any time' \
+            ' in your settings)') % token.consumer.name)
+        # an hour, a day, a week
+        if token.duration not in (3600, 86400, 604800):
+            self.fields['duration'].choices = [(token.duration, seconds_to_string(token.duration))] + self.fields['duration'].choices
+
+        if not token.consumer.editable_attributes:
+            for field in (field for field in self.fields if not field.startswith('oauth_')):
+                self.fields[field].widget.attrs.update({'disabled': 'disabled'})
+
+    def default_duration_label(self):
+        return self.fields['duration'].choices[0][1]
